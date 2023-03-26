@@ -2,12 +2,8 @@ function pcd = readPCDfile(filename, readOption)
 %function pcd = readPCDfile(filename, readOption)
 % Reads point clouds in PCD format
 %
-% If data is ascii and field has count bigger than 1 then elements are
-% returned as matrix with number of rows equal to number of Points and
-% number of columns equal to count.
-% If data is binary or binary_compressed than a field with a bigger count
-% than 1 is returned as one array in order of the elements within file.
-% Example: Count == 2: data =[1, 2; 3, 4] -> result == [1; 2; 3; 4]
+% If a data field has bigger count than one, the resutling data field will be
+% a [nxm] matrix, with n = number of points and m = count
 %
 % INPUTS:
 %   - filename [string]     : Path to the PCD file
@@ -93,7 +89,7 @@ try
             bytecount = pcd.header.count(i)*pcd.header.size(i);
             row_range = column_counter:column_counter+bytecount-1;
             raw_field = reshape(data(row_range, :),[],1);
-            pcd.(field) = typecast(raw_field, pcd.header.matlab_type{i});
+            pcd.(field) = reshape(typecast(raw_field, pcd.header.matlab_type{i}),  pcd.header.count(i), [])';
             column_counter = column_counter + bytecount;
         end
         
@@ -145,7 +141,7 @@ try
             bytecountElement = pcd.header.count(i)*pcd.header.size(i);
             bytecountField = bytecountElement * numPoints;
             fieldRange = current_pos:current_pos+bytecountField-1;
-            pcd.(field) = typecast(decomp_data(fieldRange), pcd.header.matlab_type{i});
+            pcd.(field) = reshape(typecast(decomp_data(fieldRange), pcd.header.matlab_type{i})', pcd.header.count(i), [])';
             current_pos = current_pos + bytecountField;
         end
        

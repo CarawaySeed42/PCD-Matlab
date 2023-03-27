@@ -29,16 +29,29 @@ if (fid == -1)
     error('ERROR: Could not create file "%s".', filename);
 end
 
-% Set size and type from specified matlab type
-pcd = set_pcd_size_and_type(pcd);
+MException = []; % Empty Matlab Exception
+try
+    % Set size and type from specified matlab type
+    pcd = set_pcd_size_and_type(pcd);
+    
+    % write Header
+    pcd = writePCDheader(pcd, fid);
+    
+    % Write data
+    pcd = writePCDdata(pcd, fid);
+    
+catch MException
+end
 
-% write Header
-pcd = writePCDheader(pcd, fid);
+% Close the PCD file, even if exception was thrown
+if fid ~= -1
+    fclose(fid);
+end
 
-% Write data
-pcd = writePCDdata(pcd, fid);
-
-
+% If Exception was thrown then throw it again after all files are closed
+if ~isempty(MException)
+    rethrow(MException);
+end
 end
 
 function pcd = writePCDheader(pcd, fid)
@@ -172,7 +185,7 @@ elseif strcmp(pcd.header.data, 'binary_compressed')
     compressed_size_check = CLZF_Obj.getDataLength();
     
     if (pcd.compressed_size ~= compressed_size_check || pcd.compressed_size == 0)
-         error('ERROR: Data compression failed! Data is too large or otherwise faulty');
+        error('ERROR: Data compression failed! Data is too large or otherwise faulty');
     end
     
     % Write data

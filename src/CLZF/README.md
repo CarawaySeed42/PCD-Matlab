@@ -1,6 +1,6 @@
 # CLZF
 CLZF .NET class library which allows de-/compression of data with the lzf compression algorithm. <br>
-Adjustments were made with respect to license: http://oldhome.schmorp.de/marc/liblzf.html<br>
+Adjustments by Patrick Kümmerle (2023) were made with respect to license:<br>
 <br>
 
 ```
@@ -39,3 +39,6 @@ Adjustments were made with respect to license: http://oldhome.schmorp.de/marc/li
  you do not delete the provisions above, a recipient may use your version
  of this file under either the BSD or the GPL.
  ```
+<br>
+<br>
+libzf releases and licenses can be found under: http://oldhome.schmorp.de/marc/liblzf.html

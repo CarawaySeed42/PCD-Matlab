@@ -7,8 +7,8 @@ Read and write PCD (Point Cloud Data) files with MATLAB
 
 #
 ### Requirements
-- Only Matlab for reading and writing binary or ascii PCD files
-- .NET Framework 4.7.2 Runtime installed for binary_compressed PCD files
+- Only Matlab required for reading and writing ```binary``` or ```ascii``` PCD files
+- .NET Framework 4.7.2 Runtime installed for reading and writing ```binary_compressed``` PCD files
 
 #
 ### Build

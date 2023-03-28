@@ -245,7 +245,7 @@ function pcd = readData(pcd, filename)
         end
        
     else
-        error('ERROR: Only ascii and binary data format are supported for now!');
+        error('ERROR: Data format %s not supported. Supported formats are ascii, binary, binary_compressed.', pcd.header.data);
     end
 end
 

@@ -36,7 +36,106 @@ try
         return;
     end
     
-    % Read data
+    pcd = readData(pcd, filename);
+    
+catch MException
+end
+
+% Close the PCD file again, even if exception was thrown
+if fid ~= -1
+    fclose(fid);
+end
+
+% If Exception was thrown then throw it again after all files are closed
+if ~isempty(MException)
+    rethrow(MException);
+end
+end
+
+function line = find_pcd_header_entry(fid, entryName)
+line = fgetl(fid);
+entryCharCount = length(entryName);
+lineCounter = 0;
+
+while strncmpi(line, entryName, entryCharCount) == 0
+    line = fgetl(fid);
+    lineCounter = lineCounter + 1;
+    if (~ischar(line) || lineCounter > 50)
+        error('ERROR: %s field not found. Invalid PCD format.', entryName);
+    end
+end
+end
+
+function pcd = read_header(pcd, filename)
+% Open the PCD file for reading
+fid = fopen(filename, 'r');
+if (fid == -1)
+    error('ERROR: Could not open file "%s".', filename);
+end
+
+% Read line to get the version
+line = find_pcd_header_entry(fid, 'VERSION');
+pcd.header.version = sscanf(line, 'VERSION %f');
+
+% Read lines to get line containing fields
+line = find_pcd_header_entry(fid, 'FIELDS');
+
+% Parse the fields
+headerFields = textscan(line, '%s');
+numFields = numel(headerFields{1}) - 1;
+pcd.header.fields = cell(1, numFields);
+for i = 1:numFields
+    pcd.header.fields{i} = headerFields{1}{i + 1};
+end
+
+% Sizes
+line = find_pcd_header_entry(fid, 'SIZE');
+lineTmp = textscan(line, '%s');
+pcd.header.size = str2double(lineTmp{1}(2:end));
+
+% Field types
+line = find_pcd_header_entry(fid, 'TYPE');
+lineTmp = textscan(line, '%s');
+pcd.header.type = cell2mat(lineTmp{1}(2:end));
+
+% Get matlab types
+pcd = get_matlab_type(pcd);
+
+% Count
+line = find_pcd_header_entry(fid, 'COUNT');
+lineTmp = textscan(line, '%s');
+pcd.header.count = str2double(lineTmp{1}(2:end));
+
+% Width
+line = find_pcd_header_entry(fid, 'WIDTH');
+pcd.header.width = sscanf(line, 'WIDTH %d');
+
+% Height
+line = find_pcd_header_entry(fid, 'HEIGHT');
+pcd.header.height = sscanf(line, 'HEIGHT %d');
+
+% Viewpoint
+line = find_pcd_header_entry(fid, 'VIEWPOINT');
+lineTmp = textscan(line, '%s');
+pcd.header.viewpoint = str2double(lineTmp{1}(2:end));
+
+% Number of points
+line = find_pcd_header_entry(fid, 'POINTS');
+pcd.header.points = sscanf(line, 'POINTS %d');
+
+% Get data type
+line = find_pcd_header_entry(fid, 'DATA');
+pcd.header.data = sscanf(line, 'DATA %s');
+
+% Header Size
+pcd.header.headerSize = ftell(fid);
+
+% Close the PCD file
+fclose(fid);
+end
+
+function pcd = readData(pcd, filename)
+% Read data
     if strcmp(pcd.header.data, 'ascii')
         fid = fopen(filename, 'r');
         if (fid == -1)
@@ -148,103 +247,6 @@ try
     else
         error('ERROR: Only ascii and binary data format are supported for now!');
     end
-    
-catch MException
-end
-
-% Close the PCD file again, even if exception was thrown
-if fid ~= -1
-    fclose(fid);
-end
-
-% If Exception was thrown then throw it again after all files are closed
-if ~isempty(MException)
-    rethrow(MException);
-end
-end
-
-
-
-function line = find_pcd_header_entry(fid, entryName)
-line = fgetl(fid);
-entryCharCount = length(entryName);
-lineCounter = 0;
-
-while strncmpi(line, entryName, entryCharCount) == 0
-    line = fgetl(fid);
-    lineCounter = lineCounter + 1;
-    if (~ischar(line) || lineCounter > 50)
-        error('ERROR: %s field not found. Invalid PCD format.', entryName);
-    end
-end
-end
-
-function pcd = read_header(pcd, filename)
-% Open the PCD file for reading
-fid = fopen(filename, 'r');
-if (fid == -1)
-    error('ERROR: Could not open file "%s".', filename);
-end
-
-% Read line to get the version
-line = find_pcd_header_entry(fid, 'VERSION');
-pcd.header.version = sscanf(line, 'VERSION %f');
-
-% Read lines to get line containing fields
-line = find_pcd_header_entry(fid, 'FIELDS');
-
-% Parse the fields
-headerFields = textscan(line, '%s');
-numFields = numel(headerFields{1}) - 1;
-pcd.header.fields = cell(1, numFields);
-for i = 1:numFields
-    pcd.header.fields{i} = headerFields{1}{i + 1};
-end
-
-% Sizes
-line = find_pcd_header_entry(fid, 'SIZE');
-lineTmp = textscan(line, '%s');
-pcd.header.size = str2double(lineTmp{1}(2:end));
-
-% Field types
-line = find_pcd_header_entry(fid, 'TYPE');
-lineTmp = textscan(line, '%s');
-pcd.header.type = cell2mat(lineTmp{1}(2:end));
-
-% Get matlab types
-pcd = get_matlab_type(pcd);
-
-% Count
-line = find_pcd_header_entry(fid, 'COUNT');
-lineTmp = textscan(line, '%s');
-pcd.header.count = str2double(lineTmp{1}(2:end));
-
-% Width
-line = find_pcd_header_entry(fid, 'WIDTH');
-pcd.header.width = sscanf(line, 'WIDTH %d');
-
-% Height
-line = find_pcd_header_entry(fid, 'HEIGHT');
-pcd.header.height = sscanf(line, 'HEIGHT %d');
-
-% Viewpoint
-line = find_pcd_header_entry(fid, 'VIEWPOINT');
-lineTmp = textscan(line, '%s');
-pcd.header.viewpoint = str2double(lineTmp{1}(2:end));
-
-% Number of points
-line = find_pcd_header_entry(fid, 'POINTS');
-pcd.header.points = sscanf(line, 'POINTS %d');
-
-% Get data type
-line = find_pcd_header_entry(fid, 'DATA');
-pcd.header.data = sscanf(line, 'DATA %s');
-
-% Header Size
-pcd.header.headerSize = ftell(fid);
-
-% Close the PCD file
-fclose(fid);
 end
 
 function pcd = get_matlab_type(pcd)

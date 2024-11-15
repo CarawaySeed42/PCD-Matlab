@@ -28,7 +28,7 @@ for iFile = 1:length(test_files)
     
     fprintf('Comparing pcd struct before and after write ...\n');
     if ~isequal(pcd_in, pcd_out)
-        fprintf('   Failure: NOT Equal! Writer rearranges input. This might NOT be an error!\n');
+        fprintf('   Failure: NOT Equal! Writer rearranges input. This might not be an error!\n');
         errorCount = errorCount + 1;
     else
         fprintf('   Success: Structs are Equal!\n');

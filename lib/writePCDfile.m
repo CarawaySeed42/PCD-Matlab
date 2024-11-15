@@ -6,15 +6,18 @@ function pcd = writePCDfile(pcd, filename)
 % exist and are populated. Size and Type of fields are derived from matlab
 % type. Size and type set by user will be ignored. To change them change
 % pcd.header.matlab_type instead.
+% If the field pcd.header.matlab_type is not present, then the class of the
+% data is used. If the data's type does not comply with matlab type, then
+% the data is casted, while printing a warning
 %
 % INPUTS:
-%   - pcd [struct]          : A structure containing the point cloud data
-%   - filename [string]     : Path to the PCD file to write to
+%   - pcd (struct)          : A structure containing the point cloud data
+%   - filename (string)     : Path to the PCD file to write to
 %
 % EXAMPLE USAGE:
 %   writePCDfile(pcd, 'my_point_cloud.pcd');
 
-if nargin == 1
+if nargin < 2
     error('ERROR: Filename must be specified.');
 end
 
@@ -23,6 +26,12 @@ if ~isfield(pcd, 'header')
     error('ERROR: Input structure does not contain header fields.');
 end
 
+% Validate matlab and header data types
+pcd = validate_data_types(pcd);
+
+% Set size and type from specified matlab type
+pcd = set_pcd_size_and_type(pcd);
+
 % Create file
 fid = fopen(filename, 'w');
 if (fid == -1)
@@ -30,10 +39,7 @@ if (fid == -1)
 end
 file_Cleanup = onCleanup(@() fclose(fid));
 
-% Set size and type from specified matlab type
-pcd = set_pcd_size_and_type(pcd);
-
-% write Header
+% write header
 pcd = writePCDheader(pcd, fid);
 
 % Write data
@@ -188,12 +194,51 @@ end
 
 end
 
+function pcd = validate_data_types(pcd)
+
+fieldCount = numel(pcd.header.fields);
+
+if ~isfield(pcd.header, 'matlab_type')
+    pcd.header.matlab_type = cell(fieldCount, 1);
+end
+
+matlabType = pcd.header.matlab_type;
+typeCount  = numel(matlabType);
+
+if (fieldCount > typeCount)
+    error('You need to specify a matlab data type every of the %d fields!', fieldCount);
+end
+
+is_binary = ~strcmp(pcd.header.data, {'ascii'});
+
+for i = 1:fieldCount
+    
+    validated_field = MakeValidVariableName(pcd.header.fields{i});
+    
+    if isempty(matlabType{i})
+        matlabType{i} = class(pcd.(validated_field));
+    end
+    
+    headerType     = matlabType{i};
+    
+    if is_binary && ~isa(pcd.(validated_field), headerType)
+        previousType = class(pcd.(validated_field));
+        pcd.(validated_field) = cast(pcd.(validated_field), headerType);
+        warning('Field "%s" was casted from "%s" to "%s"! Possible loss of data and precision!\n', validated_field, previousType, headerType);
+    end
+end
+
+pcd.header.matlab_type = matlabType;
+
+end
 
 function pcd = set_pcd_size_and_type(pcd)
 
 matlabType = pcd.header.matlab_type;
 typeCount = numel(matlabType);
-pcd.header = rmfield(pcd.header,'type');
+if isfield(pcd.header,'type')
+    pcd.header = rmfield(pcd.header,'type');
+end
 
 for i = 1:typeCount
     

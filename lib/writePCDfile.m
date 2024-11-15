@@ -28,30 +28,17 @@ fid = fopen(filename, 'w');
 if (fid == -1)
     error('ERROR: Could not create file "%s".', filename);
 end
+file_Cleanup = onCleanup(@() fclose(fid));
 
-MException = []; % Empty Matlab Exception
-try
-    % Set size and type from specified matlab type
-    pcd = set_pcd_size_and_type(pcd);
-    
-    % write Header
-    pcd = writePCDheader(pcd, fid);
-    
-    % Write data
-    pcd = writePCDdata(pcd, fid);
-    
-catch MException
-end
+% Set size and type from specified matlab type
+pcd = set_pcd_size_and_type(pcd);
 
-% Close the PCD file, even if exception was thrown
-if fid ~= -1
-    fclose(fid);
-end
+% write Header
+pcd = writePCDheader(pcd, fid);
 
-% If Exception was thrown then throw it again after all files are closed
-if ~isempty(MException)
-    rethrow(MException);
-end
+% Write data
+pcd = writePCDdata(pcd, fid);
+
 end
 
 function pcd = writePCDheader(pcd, fid)
@@ -134,8 +121,9 @@ if strcmp(pcd.header.data, 'ascii')
     data = zeros(elementsPerLine, numPoints, 'double');
     row_counter = 1;
     for i = 1:fieldCount
+        validated_field = MakeValidVariableName(pcd.header.fields{i});
         row_range = row_counter:row_counter+pcd.header.count(i)-1;
-        data(row_range, :) = double(pcd.(pcd.header.fields{i})');
+        data(row_range, :) = double(pcd.(validated_field)');
         row_counter = row_counter + pcd.header.count(i);
     end
     
@@ -148,9 +136,10 @@ elseif strcmp(pcd.header.data, 'binary')
     data = zeros(bytesPerLine, numPoints, 'uint8');
     row_counter = 1;
     for i = 1:fieldCount
+        validated_field = MakeValidVariableName(pcd.header.fields{i});
         bytecount = pcd.header.count(i)*pcd.header.size(i);
         row_range = row_counter:row_counter+bytecount-1;
-        data(row_range, :) = reshape(typecast(reshape(pcd.(pcd.header.fields{i})', 1, []), 'uint8'), bytecount, []);
+        data(row_range, :) = reshape(typecast(reshape(pcd.(validated_field)', 1, []), 'uint8'), bytecount, []);
         row_counter = row_counter + bytecount;
     end
     
@@ -173,9 +162,10 @@ elseif strcmp(pcd.header.data, 'binary_compressed')
     data = zeros(1,pcd.decompressed_size, 'uint8');
     row_counter = 1;
     for i = 1:fieldCount
+        validated_field = MakeValidVariableName(pcd.header.fields{i});
         bytecount = pcd.header.count(i)*pcd.header.size(i)*numPoints;
         row_range = row_counter:row_counter+bytecount-1;
-        data(row_range) = typecast(reshape(pcd.(pcd.header.fields{i})', 1, []), 'uint8');
+        data(row_range) = typecast(reshape(pcd.(validated_field)', 1, []), 'uint8');
         row_counter = row_counter + bytecount;
     end
     
@@ -200,9 +190,6 @@ end
 
 
 function pcd = set_pcd_size_and_type(pcd)
-
-type = 'N';
-size = 0;
 
 matlabType = pcd.header.matlab_type;
 typeCount = numel(matlabType);

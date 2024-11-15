@@ -24,32 +24,16 @@ if nargin == 1
     readOption = 'ReadAll';
 end
 
-fid = -1;
 pcd = struct();
+pcd = read_header(pcd, filename);
+pcd = createDataFields(pcd);
 
-MException = []; % Empty Matlab Exception
-try
-    pcd = read_header(pcd, filename);
-    pcd = createDataFields(pcd);
-    
-    if strcmp(readOption, 'Header')
-        return;
-    end
-    
-    pcd = readData(pcd, filename);
-    
-catch MException
+if strcmp(readOption, 'Header')
+    return;
 end
 
-% Close the PCD file again, even if exception was thrown
-if fid ~= -1
-    fclose(fid);
-end
+pcd = readData(pcd, filename);
 
-% If Exception was thrown then throw it again after all files are closed
-if ~isempty(MException)
-    rethrow(MException);
-end
 end
 
 function line = find_pcd_header_entry(fid, entryName)
@@ -72,6 +56,7 @@ fid = fopen(filename, 'r');
 if (fid == -1)
     error('ERROR: Could not open file "%s".', filename);
 end
+file_Cleanup = onCleanup(@() fclose(fid));
 
 % Read line to get the version
 line = find_pcd_header_entry(fid, 'VERSION');
@@ -130,123 +115,125 @@ pcd.header.data = sscanf(line, 'DATA %s');
 % Header Size
 pcd.header.headerSize = ftell(fid);
 
-% Close the PCD file
-fclose(fid);
 end
 
 function pcd = readData(pcd, filename)
 % Read data
-    if strcmp(pcd.header.data, 'ascii')
-        fid = fopen(filename, 'r');
-        if (fid == -1)
-            error('ERROR: Could not open file "%s".', filename);
-        end
-        
-        % Skip the header
-        fseek(fid, pcd.header.headerSize, 'bof');
-        
-        % Create the formatSpec for text file by adding all the types of fields
-        formatSpec = '';
-        for i = 1:numel(pcd.header.type)
-            currentFormat = repmat([get_formatSpec(pcd.header.type(i)), ' '], 1, pcd.header.count(i));
-            formatSpec = [formatSpec, currentFormat];
-        end
-        
-        all_PCD_data = textscan(fid, formatSpec);
-        
-        % Distribute data to their respective fields
-        column_counter = 1;
-        for i = 1:numel(pcd.header.fields)
-            field = pcd.header.fields{i};
-            count = pcd.header.count(i);
-            col_range = column_counter:column_counter+count-1;
-            pcd.(field) = cast(cell2mat(all_PCD_data(col_range)), pcd.header.matlab_type{i});
-            column_counter = column_counter + count;
-        end
-        
-    elseif strcmp(pcd.header.data, 'binary')
-        fid = fopen(filename, 'rb');
-        if (fid == -1)
-            error('ERROR: Could not open file "%s".', filename);
-        end
-        
-        % Skip the header
-        fseek(fid, pcd.header.headerSize, 'bof');
-        
-        % Count bytes per 'line' and number of points
-        bytesPerLine = sum(pcd.header.size.*pcd.header.count);
-        numPoints = pcd.header.width * pcd.header.height;
-        
-        % Read the point data
-        data = fread(fid, '*uint8');
-        data = reshape(data(1:numPoints*bytesPerLine), bytesPerLine, numPoints);
-        
-        % Distribute data to their respective fields
-        column_counter = 1;
-        for i = 1:numel(pcd.header.fields)
-            field = pcd.header.fields{i};
-            bytecount = pcd.header.count(i)*pcd.header.size(i);
-            row_range = column_counter:column_counter+bytecount-1;
-            raw_field = reshape(data(row_range, :),[],1);
-            pcd.(field) = reshape(typecast(raw_field, pcd.header.matlab_type{i}),  pcd.header.count(i), [])';
-            column_counter = column_counter + bytecount;
-        end
-        
-    elseif strcmp(pcd.header.data, 'binary_compressed')
-        
-        % load .NET assembly and create an instance of CLZF class
-        mpath = mfilename('fullpath');
-        [path,~,~] = fileparts(mpath);
-        CLZF_Assembly_Name = 'CLZF.dll';
-        CLZF_Assembly_Fullpath = fullfile(path, CLZF_Assembly_Name);
-        CLZF_asm = NET.addAssembly(CLZF_Assembly_Fullpath);
-        CLZF_Obj = LZF.NET.CLZF();
-        
-        fid = fopen(filename, 'rb');
-        if (fid == -1)
-            error('ERROR: Could not open file "%s".', filename);
-        end
-        
-        % Skip the header
-        fseek(fid, pcd.header.headerSize, 'bof');
-        
-        % The body (everything after the header) starts with a 32 bit unsigned
-        % binary number which specifies the size in bytes of the data in compressed
-        % form. Next is another 32 bit unsigned binary number which specifies the
-        % size in bytes of the data in uncompressed form
-        pcd.compressed_size = fread(fid, [1 1], '1*uint32');
-        pcd.decompressed_size = fread(fid, [1 1], '1*uint32');
-        
-        % Read the point data
-        data = fread(fid, [pcd.compressed_size 1], '*uint8');
-        
-        % Decompress data
-        decomp_byteCount_returned = CLZF_Obj.lzf_decompress(data, length(data), pcd.decompressed_size);
-        decomp_data =  uint8(CLZF_Obj.getData())';
-        decomp_byteCount =  CLZF_Obj.getDataLength();
-        
-        if (decomp_byteCount ~= pcd.decompressed_size)
-            error('ERROR: Decompression returns less bytes than specified in file!');
-        end
-        if (decomp_byteCount_returned == 0)
-            error('ERROR: Decompression failed and returned zero bytes!');
-        end
-        
-        % Distribute data to their respective fields
-        numPoints = pcd.header.width * pcd.header.height;
-        current_pos = 1;
-        for i = 1:numel(pcd.header.fields)
-            field = pcd.header.fields{i};
-            bytecountElement = pcd.header.count(i)*pcd.header.size(i);
-            bytecountField = bytecountElement * numPoints;
-            fieldRange = current_pos:current_pos+bytecountField-1;
-            pcd.(field) = reshape(typecast(decomp_data(fieldRange), pcd.header.matlab_type{i})', pcd.header.count(i), [])';
-            current_pos = current_pos + bytecountField;
-        end
-       
-    else
-        error('ERROR: Data format %s not supported. Supported formats are ascii, binary, binary_compressed.', pcd.header.data);
+
+if strcmp(pcd.header.data, 'ascii')
+    fid = fopen(filename, 'r');
+    if (fid == -1)
+        error('ERROR: Could not open file "%s".', filename);
     end
+    file_Cleanup = onCleanup(@() fclose(fid));
+    
+    % Skip the header
+    fseek(fid, pcd.header.headerSize, 'bof');
+    
+    % Create the formatSpec for text file by adding all the types of fields
+    formatSpec = '';
+    for i = 1:numel(pcd.header.type)
+        currentFormat = repmat([get_formatSpec(pcd.header.type(i)), ' '], 1, pcd.header.count(i));
+        formatSpec = [formatSpec, currentFormat];
+    end
+    
+    all_PCD_data = textscan(fid, formatSpec);
+    
+    % Distribute data to their respective fields
+    column_counter = 1;
+    for i = 1:numel(pcd.header.fields)
+        validated_field = MakeValidVariableName(pcd.header.fields{i});
+        count = pcd.header.count(i);
+        col_range = column_counter:column_counter+count-1;
+        pcd.(validated_field) = cast(cell2mat(all_PCD_data(col_range)), pcd.header.matlab_type{i});
+        column_counter = column_counter + count;
+    end
+    
+elseif strcmp(pcd.header.data, 'binary')
+    fid = fopen(filename, 'rb');
+    if (fid == -1)
+        error('ERROR: Could not open file "%s".', filename);
+    end
+    file_Cleanup = onCleanup(@() fclose(fid));
+    
+    % Skip the header
+    fseek(fid, pcd.header.headerSize, 'bof');
+    
+    % Count bytes per 'line' and number of points
+    bytesPerLine = sum(pcd.header.size.*pcd.header.count);
+    numPoints = pcd.header.width * pcd.header.height;
+    
+    % Read the point data
+    data = fread(fid, '*uint8');
+    data = reshape(data(1:numPoints*bytesPerLine), bytesPerLine, numPoints);
+    
+    % Distribute data to their respective fields
+    column_counter = 1;
+    for i = 1:numel(pcd.header.fields)
+        validated_field = MakeValidVariableName(pcd.header.fields{i});
+        bytecount = pcd.header.count(i)*pcd.header.size(i);
+        row_range = column_counter:column_counter+bytecount-1;
+        raw_field = reshape(data(row_range, :),[],1);
+        pcd.(validated_field) = reshape(typecast(raw_field, pcd.header.matlab_type{i}),  pcd.header.count(i), [])';
+        column_counter = column_counter + bytecount;
+    end
+    
+elseif strcmp(pcd.header.data, 'binary_compressed')
+    
+    % load .NET assembly and create an instance of CLZF class
+    mpath = mfilename('fullpath');
+    [path,~,~] = fileparts(mpath);
+    CLZF_Assembly_Name = 'CLZF.dll';
+    CLZF_Assembly_Fullpath = fullfile(path, CLZF_Assembly_Name);
+    CLZF_asm = NET.addAssembly(CLZF_Assembly_Fullpath);
+    CLZF_Obj = LZF.NET.CLZF();
+    
+    fid = fopen(filename, 'rb');
+    if (fid == -1)
+        error('ERROR: Could not open file "%s".', filename);
+    end
+    file_Cleanup = onCleanup(@() fclose(fid));
+    
+    % Skip the header
+    fseek(fid, pcd.header.headerSize, 'bof');
+    
+    % The body (everything after the header) starts with a 32 bit unsigned
+    % binary number which specifies the size in bytes of the data in compressed
+    % form. Next is another 32 bit unsigned binary number which specifies the
+    % size in bytes of the data in uncompressed form
+    pcd.compressed_size = fread(fid, [1 1], '1*uint32');
+    pcd.decompressed_size = fread(fid, [1 1], '1*uint32');
+    
+    % Read the point data
+    data = fread(fid, [pcd.compressed_size 1], '*uint8');
+    
+    % Decompress data
+    decomp_byteCount_returned = CLZF_Obj.lzf_decompress(data, length(data), pcd.decompressed_size);
+    decomp_data =  uint8(CLZF_Obj.getData())';
+    decomp_byteCount =  CLZF_Obj.getDataLength();
+    
+    if (decomp_byteCount ~= pcd.decompressed_size)
+        error('ERROR: Decompression returns less bytes than specified in file!');
+    end
+    if (decomp_byteCount_returned == 0)
+        error('ERROR: Decompression failed and returned zero bytes!');
+    end
+    
+    % Distribute data to their respective fields
+    numPoints = pcd.header.width * pcd.header.height;
+    current_pos = 1;
+    for i = 1:numel(pcd.header.fields)
+        validated_field = MakeValidVariableName(pcd.header.fields{i});
+        bytecountElement = pcd.header.count(i)*pcd.header.size(i);
+        bytecountField = bytecountElement * numPoints;
+        fieldRange = current_pos:current_pos+bytecountField-1;
+        pcd.(validated_field) = reshape(typecast(decomp_data(fieldRange), pcd.header.matlab_type{i})', pcd.header.count(i), [])';
+        current_pos = current_pos + bytecountField;
+    end
+    
+else
+    error('ERROR: Data format %s not supported. Supported formats are ascii, binary, binary_compressed.', pcd.header.data);
+end
 end
 
 function pcd = get_matlab_type(pcd)
@@ -331,6 +318,7 @@ end
 function pcd = createDataFields(pcd)
 
 for i = 1:numel(pcd.header.fields)
-    pcd.(pcd.header.fields{i}) = [];
+    validated_fieldname = MakeValidVariableName(pcd.header.fields{i});
+    pcd.(validated_fieldname) = [];
 end
 end

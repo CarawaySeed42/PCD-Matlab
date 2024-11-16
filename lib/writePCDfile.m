@@ -187,7 +187,7 @@ elseif strcmp(pcd.header.data, 'binary_compressed')
     % Write data
     fwrite(fid, pcd.compressed_size, '1*uint32');
     fwrite(fid, pcd.decompressed_size, '1*uint32');
-    fwrite(fid, data_compressed, 'uint8');
+    fwrite(fid, data_compressed(1:pcd.compressed_size), 'uint8');
 else
     error('ERROR: Data format not supported. Supported formats are ascii, binary, binary_compressed.');
 end
@@ -239,6 +239,12 @@ typeCount = numel(matlabType);
 if isfield(pcd.header,'type')
     pcd.header = rmfield(pcd.header,'type');
 end
+if isfield(pcd.header,'size')
+    pcd.header = rmfield(pcd.header,'size');
+end
+
+pcd.header.size = zeros(typeCount, 1);
+pcd.header.type = char(zeros(typeCount, 1));
 
 for i = 1:typeCount
     
@@ -267,7 +273,7 @@ for i = 1:typeCount
             error('ERROR: Matlab type %s invalid.', matlabType{i});
     end
     
-    pcd.header.size(i) = size;
+    pcd.header.size(i,1) = size;
     pcd.header.type(i,1) = type;
 end
 

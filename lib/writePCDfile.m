@@ -90,7 +90,10 @@ end
 
 % Viewpoint
 if isfield(pcd.header, 'viewpoint')
-    fprintf(fid, 'VIEWPOINT %g %g %g %g %g %g %g\n', pcd.header.viewpoint');
+    % Use num2str to format viewpoint because fprintf's compact formatting can truncate values for no good reason
+    viewpoint_string = arrayfun(@(x) num2str(x),pcd.header.viewpoint,'UniformOutput',false);
+    viewpoint_string = sprintf('%s ', viewpoint_string{:});
+    fprintf(fid, 'VIEWPOINT %s\n', viewpoint_string);
 end
 
 % Number of Points
@@ -119,10 +122,6 @@ fieldCount = numel(pcd.header.fields);
 
 if strcmp(pcd.header.data, 'ascii')
     
-    % Create format specifier for fprintf write
-    formatSpec = repmat('%g ', 1, elementsPerLine);
-    formatSpec(end:end+1) = '\n';
-    
     % Create a matrix that contains all data to write as doubles
     data = zeros(elementsPerLine, numPoints, 'double');
     row_counter = 1;
@@ -132,6 +131,10 @@ if strcmp(pcd.header.data, 'ascii')
         data(row_range, :) = double(pcd.(validated_field)');
         row_counter = row_counter + pcd.header.count(i);
     end
+    
+    % Create format specifier for fprintf write
+    formatSpec = type_to_format_spec(pcd.header.type);
+    formatSpec(end:end+1) = '\n';
     
     % Write data
     fprintf(fid, formatSpec, data);
@@ -276,5 +279,26 @@ for i = 1:typeCount
     pcd.header.size(i,1) = size;
     pcd.header.type(i,1) = type;
 end
+
+end
+
+function formatSpec = type_to_format_spec(field_type)
+
+formatSpec = cell(numel(field_type), 1);
+
+for i = 1:numel(field_type)
+   switch field_type(i)
+        case 'I'
+            formatSpec{i} = '%d';
+        case 'U'
+            formatSpec{i} = '%u';
+        case 'F'
+            formatSpec{i} = '%f';
+        otherwise
+            error('ERROR: field type %s invalid.', field_type(i));
+   end 
+end
+
+formatSpec = sprintf('%s ', formatSpec{:});
 
 end

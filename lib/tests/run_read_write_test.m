@@ -28,7 +28,7 @@ for iFile = 1:length(test_files)
     
     fprintf('Comparing pcd struct before and after write ...\n');
     if ~isequal(pcd_in, pcd_out)
-        fprintf('   Failure: NOT Equal! Writer rearranges input. This might not be an error!\n');
+        fprintf('   Failure: NOT Equal! This might not be an error as it is based on field order!\n');
         errorCount = errorCount + 1;
     else
         fprintf('   Success: Structs are Equal!\n');
@@ -38,7 +38,7 @@ for iFile = 1:length(test_files)
     contents_equal = true;
     
     % Compare header structure and data contents
-    current_field = ' ';
+    error_field = ' ';
     fields        = fieldnames(pcd_in);
     for iField = 1:numel(fields)
         
@@ -48,22 +48,24 @@ for iFile = 1:length(test_files)
         if isstruct(current_field_data)
             sub_fields     = fieldnames(current_field_data);
             
-            for iSubField = 1:numel(fields)
+            for iSubField = 1:numel(sub_fields)
                 sub_field = sub_fields{iSubField};
                 if ~isequal(current_field_data.(sub_field), pcd_compare.(current_field).(sub_field))
                     contents_equal = false;
+                    error_field = sub_field;
                     break;
                 end
             end
             
         elseif ~isequal(current_field_data, pcd_compare.(current_field))
             contents_equal = false;
+            error_field = current_field;
             break;
         end
     end
     
     if ~contents_equal
-        fprintf('   Failure: NOT Equal! Reader and Writer return different data in field %s!!!\n', current_field);
+        fprintf('   Failure: NOT Equal! Reader and Writer return different data in field "%s"!!!\n', error_field);
         errorCount = errorCount + 1;
     else
         fprintf('   Success: Reader and Writer return same data\n');

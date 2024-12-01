@@ -48,23 +48,23 @@ pcd = writePCDdata(pcd, fid);
 end
 
 function pcd = writePCDheader(pcd, fid)
-
+%WRITEPCDHEADER Writes pcd header to file
 % Write header
 % Version
 fprintf(fid, '# .PCD v.7 - Point Cloud Data file format\n');
 fprintf(fid, 'VERSION %.1f\n', pcd.header.version);
 
 % Fields
-fprintf(fid, 'FIELDS ');
+fprintf(fid, 'FIELDS');
 for i = 1:numel(pcd.header.fields)
-    fprintf(fid, '%s ', pcd.header.fields{i});
+    fprintf(fid, ' %s', pcd.header.fields{i});
 end
 fprintf(fid, '\n');
 
 % Sizes
-fprintf(fid, 'SIZE ');
+fprintf(fid, 'SIZE');
 for i = 1:numel(pcd.header.size)
-    fprintf(fid, '%d ', pcd.header.size(i));
+    fprintf(fid, ' %d', pcd.header.size(i));
 end
 fprintf(fid, '\n');
 
@@ -92,8 +92,8 @@ end
 if isfield(pcd.header, 'viewpoint')
     % Use num2str to format viewpoint because fprintf's compact formatting can truncate values for no good reason
     viewpoint_string = arrayfun(@(x) num2str(x),pcd.header.viewpoint,'UniformOutput',false);
-    viewpoint_string = sprintf('%s ', viewpoint_string{:});
-    fprintf(fid, 'VIEWPOINT %s\n', viewpoint_string);
+    viewpoint_string = sprintf(' %s', viewpoint_string{:});
+    fprintf(fid, 'VIEWPOINT%s\n', viewpoint_string);
 end
 
 % Number of Points
@@ -114,7 +114,7 @@ pcd.header.headerSize = ftell(fid);
 end
 
 function pcd = writePCDdata(pcd, fid)
-
+%WRITEPCDDATA Writes all pcd data fields to file
 elementsPerLine = sum(pcd.header.count);
 bytesPerLine = sum(pcd.header.size.*pcd.header.count);
 numPoints = pcd.header.width * pcd.header.height;
@@ -133,7 +133,7 @@ if strcmp(pcd.header.data, 'ascii')
     end
     
     % Create format specifier for fprintf write
-    formatSpec = type_to_format_spec(pcd.header.type);
+    formatSpec = type_to_format_spec(pcd.header);
     formatSpec(end:end+1) = '\n';
     
     % Write data
@@ -198,7 +198,7 @@ end
 end
 
 function pcd = validate_data_types(pcd)
-
+%VALIDATE_DATA_TYPES Validates matlab types for every data field
 fieldCount = numel(pcd.header.fields);
 
 if ~isfield(pcd.header, 'matlab_type')
@@ -209,7 +209,7 @@ matlabType = pcd.header.matlab_type;
 typeCount  = numel(matlabType);
 
 if (fieldCount > typeCount)
-    error('You need to specify a matlab data type every of the %d fields!', fieldCount);
+    error('You need to specify a matlab data type every of the %d fields or delete "pcd.header.matlab_type" for auto detection!', fieldCount);
 end
 
 is_binary = ~strcmp(pcd.header.data, {'ascii'});
@@ -236,7 +236,7 @@ pcd.header.matlab_type = matlabType;
 end
 
 function pcd = set_pcd_size_and_type(pcd)
-
+%SET_PCD_SIZE_AND_TYPE Derives size and type according to fields' matlab type
 matlabType = pcd.header.matlab_type;
 typeCount = numel(matlabType);
 if isfield(pcd.header,'type')
@@ -282,23 +282,38 @@ end
 
 end
 
-function formatSpec = type_to_format_spec(field_type)
+function formatSpec = type_to_format_spec(pcd_header)
+%TYPE_TO_FORMAT_SPEC Creates format spec to write fields as ascii
+field_type = pcd_header.type;
+field_counts = pcd_header.count;
+formatSpec = cell(sum(field_counts), 1);
 
-formatSpec = cell(numel(field_type), 1);
+field_type_count = numel(field_type);
+field_counts_count = numel(field_counts);
+if field_type_count ~= field_counts_count
+    error('Every field type needs a field data count! Error: numel(pcd_header.type) ~= numel(pcd_header.count) : %d ~= %d)!', field_type_count, field_counts_count);
+end
 
-for i = 1:numel(field_type)
-   switch field_type(i)
+curInd = 1;
+for i = 1:field_type_count
+    field_count = field_counts(i);
+    fieldRange = curInd : curInd + field_count - 1;
+    switch field_type(i)
         case 'I'
-            formatSpec{i} = '%d';
+            formatSpec(fieldRange) = {'%d'};
         case 'U'
-            formatSpec{i} = '%u';
+            formatSpec(fieldRange) = {'%u'};
         case 'F'
-            formatSpec{i} = '%f';
+            formatSpec(fieldRange) = {'%f'};
         otherwise
             error('ERROR: field type %s invalid.', field_type(i));
-   end 
+    end
+    curInd = curInd + field_count;
 end
 
 formatSpec = sprintf('%s ', formatSpec{:});
 
+% ToDo:
+% Determine optimal precision and width for every field 
+% in case of floating point type
 end
